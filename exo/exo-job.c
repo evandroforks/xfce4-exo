@@ -30,8 +30,8 @@
 #include <exo/exo-config.h>
 #include <exo/exo-job.h>
 #include <exo/exo-private.h>
-#include <exo/exo-string.h>
 #include <exo/exo-alias.h>
+#include <libxfce4util/libxfce4util.h>
 
 /**
  * SECTION: exo-job
@@ -391,6 +391,8 @@ exo_job_emit_valist (ExoJob *job,
   exo_job_send_to_mainloop (job,
                             exo_job_emit_valist_in_mainloop,
                             &data, NULL);
+
+  va_end (data.var_args);
 }
 
 

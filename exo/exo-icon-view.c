@@ -46,8 +46,8 @@
 #include <exo/exo-cell-renderer-icon.h>
 #include <exo/exo-marshal.h>
 #include <exo/exo-private.h>
-#include <exo/exo-string.h>
 #include <exo/exo-alias.h>
+#include <libxfce4util/libxfce4util.h>
 
 /**
  * SECTION: exo-icon-view
@@ -2511,10 +2511,12 @@ exo_icon_view_button_release_event (GtkWidget      *widget,
                   exo_icon_view_item_activated (icon_view, path);
                   gtk_tree_path_free (path);
                 }
-
-              /* reduce the selection to just the clicked item  */
-              exo_icon_view_unselect_all_internal (icon_view);
-              exo_icon_view_select_item (icon_view, item);
+              else
+                {
+                  /* reduce the selection to just the clicked item  */
+                  exo_icon_view_unselect_all_internal (icon_view);
+                  exo_icon_view_select_item (icon_view, item);
+                }
             }
 
           /* reset the last single clicked item */
@@ -2553,8 +2555,11 @@ exo_icon_view_scroll_event (GtkWidget      *widget,
     event->direction = GDK_SCROLL_RIGHT;
   else if (event->direction == GDK_SCROLL_SMOOTH)
     {
-      event->delta_x = event->delta_y;
-      event->delta_y = 0.0;
+      if (event->delta_x == 0.0)
+        {
+          event->delta_x = event->delta_y;
+          event->delta_y = 0.0;
+        }
     }
 
   /* scrolling will be handled by GtkScrolledWindow */
@@ -4113,7 +4118,7 @@ exo_icon_view_rows_reordered (GtkTreeModel *model,
 
   /* determine the number of items to reorder */
   length = gtk_tree_model_iter_n_children (model, NULL);
-  if (G_UNLIKELY (length == 0))
+  if (G_UNLIKELY (length <= 0))
     return;
 
   list_array = g_newa (GList *, length);
@@ -5597,7 +5602,6 @@ exo_icon_view_set_model (ExoIconView  *icon_view,
       /* build up the initial items list */
       if (gtk_tree_model_get_iter_first (model, &iter))
         {
-          n = 0;
           do
             {
               item = g_slice_new0 (ExoIconViewItem);
@@ -8369,9 +8373,7 @@ exo_icon_view_search_ensure_directory (ExoIconView *icon_view)
 
   /* allocate the search entry widget */
   icon_view->priv->search_entry = gtk_entry_new ();
-#if GTK_CHECK_VERSION(3, 22, 20)
   gtk_entry_set_input_hints (GTK_ENTRY (icon_view->priv->search_entry), GTK_INPUT_HINT_NO_EMOJI);
-#endif
   g_signal_connect (G_OBJECT (icon_view->priv->search_entry), "activate", G_CALLBACK (exo_icon_view_search_activate), icon_view);
   gtk_box_pack_start (GTK_BOX (vbox), icon_view->priv->search_entry, TRUE, TRUE, 0);
   gtk_widget_realize (icon_view->priv->search_entry);

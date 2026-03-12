@@ -24,6 +24,7 @@
 #include <exo-desktop-item-edit/exo-die-command-entry.h>
 #include <exo-desktop-item-edit/exo-die-desktop-model.h>
 #include <exo-desktop-item-edit/exo-die-editor.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -626,7 +627,7 @@ exo_die_editor_icon_clicked (GtkWidget    *button,
   gtk_dialog_set_default_response (GTK_DIALOG (chooser), GTK_RESPONSE_ACCEPT);
 
   /* check if we have an icon to set for the chooser */
-  if (G_LIKELY (!exo_str_is_empty (editor->icon)))
+  if (G_LIKELY (!xfce_str_is_empty (editor->icon)))
     exo_icon_chooser_dialog_set_icon (EXO_ICON_CHOOSER_DIALOG (chooser), editor->icon);
 
   /* run the chooser dialog */
@@ -670,7 +671,7 @@ exo_die_editor_path_clicked (GtkWidget    *button,
   gtk_dialog_set_default_response (GTK_DIALOG (chooser), GTK_RESPONSE_ACCEPT);
 
   /* check if we have a path to set for the chooser */
-  if (G_LIKELY (!exo_str_is_empty (editor->path)))
+  if (G_LIKELY (!xfce_str_is_empty (editor->path)))
     gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (chooser), editor->path);
 
   /* run the chooser dialog */
@@ -760,7 +761,7 @@ exo_die_editor_cell_data_func (GtkCellLayout   *cell_layout,
       /* try to load the icon from the file */
       pixbuf = gdk_pixbuf_new_from_file (icon, NULL);
     }
-  else if (!exo_str_is_empty (icon))
+  else if (!xfce_str_is_empty (icon))
     {
       /* determine the appropriate icon theme */
       icon_theme = gtk_icon_theme_get_for_screen (gtk_widget_get_screen (GTK_WIDGET (editor)));
@@ -828,15 +829,15 @@ exo_die_editor_get_complete (ExoDieEditor *editor)
   switch (editor->mode)
     {
     case EXO_DIE_EDITOR_MODE_APPLICATION:
-      return (!exo_str_is_empty (editor->name)
-              && !exo_str_is_empty (editor->command));
+      return (!xfce_str_is_empty (editor->name)
+              && !xfce_str_is_empty (editor->command));
 
     case EXO_DIE_EDITOR_MODE_LINK:
-      return (!exo_str_is_empty (editor->name)
-              && !exo_str_is_empty (editor->url));
+      return (!xfce_str_is_empty (editor->name)
+              && !xfce_str_is_empty (editor->url));
 
     case EXO_DIE_EDITOR_MODE_DIRECTORY:
-      return !exo_str_is_empty (editor->name);
+      return !xfce_str_is_empty (editor->name);
 
     default:
       g_assert_not_reached ();
@@ -962,7 +963,7 @@ exo_die_editor_set_name (ExoDieEditor *editor,
   g_return_if_fail (g_utf8_validate (name, -1, NULL));
 
   /* check if we have a new name */
-  if (!exo_str_is_equal (editor->name, name))
+  if (g_strcmp0 (editor->name, name) != 0)
     {
       /* apply the new name */
       g_free (editor->name);
@@ -1008,7 +1009,7 @@ exo_die_editor_set_comment (ExoDieEditor *editor,
   g_return_if_fail (g_utf8_validate (comment, -1, NULL));
 
   /* check if we have a new comment here */
-  if (!exo_str_is_equal (editor->comment, comment))
+  if (g_strcmp0 (editor->comment, comment) != 0)
     {
       /* apply the new comment */
       g_free (editor->comment);
@@ -1054,7 +1055,7 @@ exo_die_editor_set_command (ExoDieEditor *editor,
   g_return_if_fail (g_utf8_validate (command, -1, NULL));
 
   /* check if we have a new command here */
-  if (!exo_str_is_equal (editor->command, command))
+  if (g_strcmp0 (editor->command, command) != 0)
     {
       /* apply the new command */
       g_free (editor->command);
@@ -1101,7 +1102,7 @@ exo_die_editor_set_url (ExoDieEditor *editor,
   g_return_if_fail (g_utf8_validate (url, -1, NULL));
 
   /* check if we have a new URL here */
-  if (!exo_str_is_equal (editor->url, url))
+  if (g_strcmp0 (editor->url, url) != 0)
     {
       /* apply the new URL */
       g_free (editor->url);
@@ -1148,7 +1149,7 @@ exo_die_editor_set_path (ExoDieEditor *editor,
   g_return_if_fail (g_utf8_validate (path, -1, NULL));
 
   /* check if we have a new URL here */
-  if (!exo_str_is_equal (editor->path, path))
+  if (g_strcmp0 (editor->path, path) != 0)
     {
       /* apply the new URL */
       g_free (editor->path);
@@ -1189,19 +1190,22 @@ void
 exo_die_editor_set_icon (ExoDieEditor *editor,
                          const gchar  *icon)
 {
-  GtkIconTheme *icon_theme;
-  GdkPixbuf    *pixbuf_scaled;
-  GdkPixbuf    *pixbuf = NULL;
-  GtkWidget    *image;
-  GtkWidget    *label;
-  gint          pixbuf_width;
-  gint          pixbuf_height;
+  GtkIconTheme    *icon_theme;
+  GdkPixbuf       *pixbuf_scaled;
+  GdkPixbuf       *pixbuf = NULL;
+  cairo_surface_t *surface;
+  GtkWidget       *image;
+  GtkWidget       *label;
+  gint             scale_factor;
+  gint             icon_size;
+  gint             pixbuf_width;
+  gint             pixbuf_height;
 
   g_return_if_fail (EXO_DIE_IS_EDITOR (editor));
   g_return_if_fail (g_utf8_validate (icon, -1, NULL));
 
   /* check if we have a new icon here */
-  if (!exo_str_is_equal (editor->icon, icon))
+  if (g_strcmp0 (editor->icon, icon) != 0)
     {
       /* apply the new icon */
       g_free (editor->icon);
@@ -1214,19 +1218,22 @@ exo_die_editor_set_icon (ExoDieEditor *editor,
       if (gtk_bin_get_child (GTK_BIN (editor->icon_button)) != NULL)
         gtk_widget_destroy (gtk_bin_get_child (GTK_BIN (editor->icon_button)));
 
+      scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (editor));
+      icon_size = 48 * scale_factor;
+
       /* check the icon depending on the type */
       if (icon != NULL && g_path_is_absolute (icon))
         {
           /* try to load the icon from the file */
           pixbuf = gdk_pixbuf_new_from_file (icon, NULL);
         }
-      else if (!exo_str_is_empty (icon))
+      else if (!xfce_str_is_empty (icon))
         {
           /* determine the appropriate icon theme */
           icon_theme = gtk_icon_theme_get_for_screen (gtk_widget_get_screen (GTK_WIDGET (editor)));
 
           /* try to load the named icon */
-          pixbuf = gtk_icon_theme_load_icon (icon_theme, icon, 48, 0, NULL);
+          pixbuf = gtk_icon_theme_load_icon (icon_theme, icon, icon_size, GTK_ICON_LOOKUP_FORCE_SIZE, NULL);
         }
 
       /* setup the icon button */
@@ -1235,20 +1242,22 @@ exo_die_editor_set_icon (ExoDieEditor *editor,
           /* scale down the icon if required */
           pixbuf_width = gdk_pixbuf_get_width (pixbuf);
           pixbuf_height = gdk_pixbuf_get_height (pixbuf);
-          if (G_UNLIKELY (pixbuf_width > 48 || pixbuf_height > 48))
+          if (G_UNLIKELY (pixbuf_width > icon_size || pixbuf_height > icon_size))
             {
-              pixbuf_scaled = exo_gdk_pixbuf_scale_ratio (pixbuf, 48);
+              pixbuf_scaled = exo_gdk_pixbuf_scale_ratio (pixbuf, icon_size);
               g_object_unref (G_OBJECT (pixbuf));
               pixbuf = pixbuf_scaled;
             }
+          surface = gdk_cairo_surface_create_from_pixbuf (pixbuf, scale_factor, gtk_widget_get_window (GTK_WIDGET (editor)));
 
           /* setup an image for the icon */
-          image = gtk_image_new_from_pixbuf (pixbuf);
+          image = gtk_image_new_from_surface (surface);
           gtk_container_add (GTK_CONTAINER (editor->icon_button), image);
           gtk_widget_show (image);
 
           /* release the pixbuf */
           g_object_unref (G_OBJECT (pixbuf));
+          cairo_surface_destroy (surface);
         }
       else
         {

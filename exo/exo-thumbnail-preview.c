@@ -42,6 +42,7 @@
 #include <exo/exo-utils.h>
 #include <exo/exo-alias.h>
 #include <exo/exo-string.h>
+#include <libxfce4util/libxfce4util.h>
 
 
 
@@ -80,8 +81,6 @@ exo_thumbnail_preview_class_init (ExoThumbnailPreviewClass *klass)
 static void
 exo_thumbnail_preview_init (ExoThumbnailPreview *thumbnail_preview)
 {
-  GtkWidget *button;
-  GtkWidget *label;
   GtkWidget *ebox;
   GtkWidget *vbox;
   GtkWidget *box;
@@ -90,6 +89,7 @@ exo_thumbnail_preview_init (ExoThumbnailPreview *thumbnail_preview)
   _exo_i18n_init ();
 
   gtk_frame_set_shadow_type (GTK_FRAME (thumbnail_preview), GTK_SHADOW_IN);
+  gtk_frame_set_label (GTK_FRAME (thumbnail_preview), _("Preview"));
   gtk_widget_set_sensitive (GTK_WIDGET (thumbnail_preview), FALSE);
 
   ebox = gtk_event_box_new ();
@@ -100,19 +100,6 @@ exo_thumbnail_preview_init (ExoThumbnailPreview *thumbnail_preview)
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add (GTK_CONTAINER (ebox), vbox);
   gtk_widget_show (vbox);
-
-  button = gtk_button_new ();
-  g_signal_connect (G_OBJECT (button), "button-press-event", G_CALLBACK (exo_noop_true), NULL);
-  g_signal_connect (G_OBJECT (button), "button-release-event", G_CALLBACK (exo_noop_true), NULL);
-  g_signal_connect (G_OBJECT (button), "enter-notify-event", G_CALLBACK (exo_noop_true), NULL);
-  g_signal_connect (G_OBJECT (button), "leave-notify-event", G_CALLBACK (exo_noop_true), NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
-
-  label = gtk_label_new (_("Preview"));
-  g_object_set (label, "xalign", 0.0f, "yalign", 0.5f, NULL);
-  gtk_container_add (GTK_CONTAINER (button), label);
-  gtk_widget_show (label);
 
   box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
 
@@ -250,14 +237,17 @@ void
 _exo_thumbnail_preview_set_uri (ExoThumbnailPreview *thumbnail_preview,
                                 const gchar         *uri)
 {
-  struct stat statb;
-  GdkPixbuf  *thumbnail_framed;
-  GdkPixbuf  *thumbnail;
-  gchar      *icon_name = NULL;
-  gchar      *size_name = NULL;
-  gchar      *displayname;
-  gchar      *filename;
-  gchar      *slash;
+  struct stat      statb;
+  GdkPixbuf       *thumbnail_framed;
+  GdkPixbuf       *thumbnail;
+  cairo_surface_t *surface;
+  gchar           *icon_name = NULL;
+  gchar           *size_name = NULL;
+  gchar           *displayname;
+  gchar           *filename;
+  gchar           *slash;
+  gint             scale_factor;
+  ExoThumbnailSize thumbnail_size;
 
   _exo_return_if_fail (EXO_IS_THUMBNAIL_PREVIEW (thumbnail_preview));
 
@@ -327,7 +317,7 @@ _exo_thumbnail_preview_set_uri (ExoThumbnailPreview *thumbnail_preview,
         {
           /* determine the basename from the URI */
           slash = strrchr (uri, '/');
-          if (G_LIKELY (!exo_str_is_empty (slash)))
+          if (G_LIKELY (!xfce_str_is_empty (slash)))
             displayname = g_filename_display_name (slash + 1);
           else
             displayname = g_filename_display_name (uri);
@@ -343,11 +333,14 @@ _exo_thumbnail_preview_set_uri (ExoThumbnailPreview *thumbnail_preview,
       else
         {
           /* try to load a thumbnail for the URI */
-          thumbnail = _exo_thumbnail_get_for_uri (uri, EXO_THUMBNAIL_SIZE_NORMAL, NULL);
+          scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (thumbnail_preview));
+          thumbnail_size = scale_factor > 1 ? EXO_THUMBNAIL_SIZE_LARGE : EXO_THUMBNAIL_SIZE_NORMAL;
+
+          thumbnail = _exo_thumbnail_get_for_uri (uri, thumbnail_size, NULL);
           if (thumbnail == NULL && G_LIKELY (filename != NULL))
             {
               /* but we can try to generate a thumbnail */
-              thumbnail = _exo_thumbnail_get_for_file (filename, EXO_THUMBNAIL_SIZE_NORMAL, NULL);
+              thumbnail = _exo_thumbnail_get_for_file (filename, thumbnail_size, NULL);
             }
 
           /* check if we have a thumbnail */
@@ -355,9 +348,11 @@ _exo_thumbnail_preview_set_uri (ExoThumbnailPreview *thumbnail_preview,
             {
               /* setup the thumbnail for the image (using a frame if possible) */
               thumbnail_framed = thumbnail_add_frame (thumbnail);
-              gtk_image_set_from_pixbuf (GTK_IMAGE (thumbnail_preview->image), thumbnail_framed);
+              surface = gdk_cairo_surface_create_from_pixbuf (thumbnail_framed, scale_factor, gtk_widget_get_window (GTK_WIDGET (thumbnail_preview)));
+              gtk_image_set_from_surface (GTK_IMAGE (thumbnail_preview->image), surface);
               g_object_unref (G_OBJECT (thumbnail_framed));
               g_object_unref (G_OBJECT (thumbnail));
+              cairo_surface_destroy (surface);
             }
           else
             {

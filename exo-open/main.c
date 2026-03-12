@@ -31,11 +31,13 @@
 #endif
 
 #include <glib/gstdio.h>
+#include <glib.h>
 #include <gio/gio.h>
 #ifdef HAVE_GIO_UNIX
 #include <gio/gdesktopappinfo.h>
 #endif
 #include <exo/exo.h>
+
 
 
 #define USERCHARS       "-[:alnum:]"
@@ -101,6 +103,106 @@ static KnownSchemes known_schemes[] =
   { "^mailto$",          "MailReader" },
 };
 
+struct launch_uri_data
+{
+  gboolean is_done;
+  gboolean success;
+  GError  *error;
+};
+
+
+
+/* Prototypes */
+static void     usage                        (void);
+static gboolean exo_open_launch_desktop_file (const gchar  *arg);
+static gchar   *exo_open_get_path            (const gchar  *string);
+static gchar   *exo_open_find_scheme         (const gchar  *string);
+static gboolean exo_open_launch_category     (const gchar  *category,
+                                              const gchar  *parameters);
+static gboolean exo_open_uri_known_category  (const gchar  *uri,
+                                              const gchar  *scheme,
+                                              gboolean     *succeed);
+static gboolean exo_open_uri                 (const gchar  *uri,
+                                              GError      **error);
+static gboolean exo_g_app_info_launch_uri    (GAppInfo          *appinfo,
+                                              const gchar       *uri,
+                                              GAppLaunchContext *context,
+                                              GError           **error);
+static void     launch_uri_callback          (GObject           *src,
+                                              GAsyncResult      *res,
+                                              gpointer           user_data);
+
+
+
+static void
+launch_uri_callback (GObject      *src,
+                     GAsyncResult *res,
+                     gpointer      user_data)
+{
+  struct launch_uri_data *data = user_data;
+
+  data->success = g_app_info_launch_uris_finish (G_APP_INFO (src),
+                                                 res,
+                                                 &data->error);
+  data->is_done = TRUE;
+  return;
+}
+
+
+
+/**
+ * exo_g_app_info_launch_uri:
+ * @appinfo: a #GAppInfo.
+ * @uri: an utf-8 encoded uri to pass as an argument.
+ * @context: a #GAppLaunchContext or NULL.
+ * @error: a #GError.
+ *
+ * D-BUS friendly version of g_app_info_launch_uris.
+ * D-BUS-activated applications don't have to be started
+ * if the caller is terminated early. This function
+ * properly waits until the application is started.
+ *
+ * See also: https://gitlab.gnome.org/GNOME/glib/-/commit/051c6ba4e7111b04ab417403730b82de02a1c0d8
+ *
+ * Returns: %TRUE on success, %FALSE on error.
+ **/
+static gboolean
+exo_g_app_info_launch_uri  (GAppInfo          *appinfo,
+                            const gchar       *uri,
+                            GAppLaunchContext *context,
+                            GError           **error)
+{
+  GList    fake_list;
+
+  struct launch_uri_data data;
+
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  fake_list.data = (gpointer) uri;
+  fake_list.prev = fake_list.next = NULL;
+
+  data.is_done = FALSE;
+  data.success = FALSE;
+  data.error   = NULL;
+
+  g_app_info_launch_uris_async (appinfo,
+                                &fake_list,
+                                NULL,
+                                NULL,
+                                launch_uri_callback,
+                                (gpointer) &data);
+
+  while (!data.is_done)
+    g_main_context_iteration (NULL, TRUE);
+
+  if (error == NULL)
+    g_clear_error (&data.error);
+  else
+    *error = data.error;
+
+  return data.success;
+}
+
 
 
 static void
@@ -145,6 +247,11 @@ exo_open_launch_desktop_file (const gchar *arg)
 {
 #ifdef HAVE_GIO_UNIX
   GFile           *gfile;
+  GFile           *parent;
+  gchar           *type;
+  gchar           *link;
+  gchar           *abs_path;
+  gchar           *file_dir;
   gchar           *contents;
   gsize            length;
   gboolean         result;
@@ -156,9 +263,18 @@ exo_open_launch_desktop_file (const gchar *arg)
   if (G_UNLIKELY (gfile == NULL))
     return FALSE;
 
+  /* Only execute local .desktop files to prevent execution of malicious launchers from  foreign locations */
+  if (g_file_has_uri_scheme (gfile, "file") == FALSE)
+    {
+      char *uri = g_file_get_uri (gfile);
+      g_warning ("Execution of remote .desktop file '%s' was skipped due to security concerns.", uri);
+      g_object_unref (gfile);
+      g_free (uri);
+      return FALSE;
+    }
+
   /* load the contents of the file */
   result = g_file_load_contents (gfile, NULL, &contents, &length, NULL, NULL);
-  g_object_unref (G_OBJECT (gfile));
   if (G_UNLIKELY (!result || length == 0))
     return FALSE;
 
@@ -170,6 +286,42 @@ exo_open_launch_desktop_file (const gchar *arg)
     {
       g_key_file_free (key_file);
       return FALSE;
+    }
+
+  /* try to launch "Link" type .desktop file */
+  type = g_key_file_get_value (key_file,
+                               G_KEY_FILE_DESKTOP_GROUP,
+                               G_KEY_FILE_DESKTOP_KEY_TYPE,
+                               NULL);
+  if (g_strcmp0 (type, G_KEY_FILE_DESKTOP_TYPE_LINK) == 0)
+    {
+      link = g_key_file_get_value (key_file,
+                                   G_KEY_FILE_DESKTOP_GROUP,
+                                   G_KEY_FILE_DESKTOP_KEY_URL,
+                                   NULL);
+      if (!g_uri_is_valid (link, G_URI_FLAGS_NONE, NULL))
+        {
+          parent = g_file_get_parent (gfile);
+          file_dir = g_file_get_path (parent);
+          g_object_unref (parent);
+          abs_path = g_build_filename (file_dir, link, NULL);
+          g_free (file_dir);
+          g_free (link);
+          link = exo_open_find_scheme (abs_path);
+          g_free (abs_path);
+        }
+      result = exo_open_uri (link, NULL);
+      g_free (link);
+    }
+  else
+    result = FALSE;
+  g_free (type);
+  g_object_unref (G_OBJECT (gfile));
+
+  if (result)
+    {
+      g_key_file_free (key_file);
+      return TRUE;
     }
 
   /* create the appinfo */
@@ -241,7 +393,7 @@ exo_open_find_scheme (const gchar *string)
 
   /* regular expression to check if it looks like an url, we don't need to check
    * for a complete url (http://) because this is already matched by the
-   * exo_str_looks_like_an_uri() test */
+   * g_uri_is_valid () test */
   if (g_regex_match_simple (MATCH_PATTERN_HTTP, string, G_REGEX_CASELESS, 0))
     return g_strconcat ("http://", string, NULL);
 
@@ -324,7 +476,6 @@ exo_open_uri (const gchar  *uri,
   GAppInfo            *app_info;
   gchar               *path;
   const gchar         *executable;
-  GList                fake_list;
   const gchar * const *schemes;
   GError              *err = NULL;
   guint                i;
@@ -388,11 +539,8 @@ exo_open_uri (const gchar  *uri,
                   if (executable == NULL
                       || strcmp (executable, "exo-open") != 0)
                     {
-                      fake_list.data = (gpointer) uri;
-                      fake_list.prev = fake_list.next = NULL;
-
                       /* launch it */
-                      retval = g_app_info_launch_uris (app_info, &fake_list, NULL, &err);
+                      retval = exo_g_app_info_launch_uri (app_info, uri, NULL, &err);
                       succeed = TRUE;
                     }
 
@@ -460,7 +608,7 @@ main (gint argc, gchar **argv)
   GtkWidget       *message_area;
   GtkWidget       *label;
   GError          *err = NULL;
-  gchar           *parameter, *quoted;
+  gchar           *parameter;
   gint             result = EXIT_SUCCESS;
   GString         *join;
   guint            i;
@@ -515,15 +663,9 @@ main (gint argc, gchar **argv)
                * arguments to be merged, this is a bit of magic to make
                * common cares work property, see sample above with xfrun4 */
               if (argc > 2 && strchr (argv[i], ' ') != NULL)
-                {
-                  quoted = g_shell_quote (argv[i]);
-                  join = g_string_append (join, quoted);
-                  g_free (quoted);
-                }
+                xfce_g_string_append_quoted (join, argv[i]);
               else
-                {
-                  join = g_string_append (join, argv[i]);
-                }
+                g_string_append (join, argv[i]);
             }
           parameter = g_string_free (join, FALSE);
         }
@@ -549,7 +691,7 @@ main (gint argc, gchar **argv)
               /* successfully launched a desktop file */
               continue;
             }
-          else if (exo_str_looks_like_an_uri (*argv))
+          else if (g_uri_is_valid (*argv, G_URI_FLAGS_NONE, NULL))
             {
               /* use the argument directly */
               uri = g_strdup (*argv);

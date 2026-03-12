@@ -241,14 +241,14 @@ main (int argc, char **argv)
                             G_KEY_FILE_DESKTOP_KEY_COMMENT, STR_FB (opt_comment, ""));
 
       /* type specific stuff */
-      if (exo_str_is_equal (opt_type, G_KEY_FILE_DESKTOP_TYPE_LINK))
+      if (g_strcmp0 (opt_type, G_KEY_FILE_DESKTOP_TYPE_LINK) == 0)
         {
           g_key_file_set_value (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                 G_KEY_FILE_DESKTOP_KEY_ICON, STR_FB (opt_icon, "user-bookmarks"));
           g_key_file_set_value (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                 G_KEY_FILE_DESKTOP_KEY_URL, STR_FB (opt_url, ""));
         }
-      else if (exo_str_is_equal (opt_type, G_KEY_FILE_DESKTOP_TYPE_DIRECTORY))
+      else if (g_strcmp0 (opt_type, G_KEY_FILE_DESKTOP_TYPE_DIRECTORY) == 0)
         {
           g_key_file_set_value (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                 G_KEY_FILE_DESKTOP_KEY_ICON, STR_FB (opt_icon, ""));
@@ -385,8 +385,8 @@ main (int argc, char **argv)
   switch (mode)
     {
     case EXO_DIE_EDITOR_MODE_APPLICATION:
-      /* setup the command */
-      value = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP,
+      /* setup the command but ignore escape sequences */
+      value = g_key_file_get_value (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                      G_KEY_FILE_DESKTOP_KEY_EXEC, NULL);
       exo_die_editor_set_command (EXO_DIE_EDITOR (editor), (value != NULL) ? value : "");
       g_free (value);
@@ -476,12 +476,12 @@ main (int argc, char **argv)
       switch (mode)
         {
         case EXO_DIE_EDITOR_MODE_APPLICATION:
-          /* save the new command */
-          g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP,
+          /* save the new command but do not escape special characters */
+          g_key_file_set_value (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                  G_KEY_FILE_DESKTOP_KEY_EXEC,
                                  exo_die_editor_get_command (EXO_DIE_EDITOR (editor)));
 
-          /* save the new command */
+          /* save the new path */
           g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP,
                                  G_KEY_FILE_DESKTOP_KEY_PATH,
                                  exo_die_editor_get_path (EXO_DIE_EDITOR (editor)));
@@ -641,6 +641,9 @@ main (int argc, char **argv)
       /* reset the error */
       g_clear_error (&error);
     }
+
+  /* has to be called manually because we are not using GtkApplication */
+  gtk_clipboard_store (gtk_widget_get_clipboard (dialog, GDK_SELECTION_CLIPBOARD));
 
   /* destroy the editor dialog */
   gtk_widget_destroy (dialog);

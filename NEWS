@@ -1,3 +1,83 @@
+4.18.0 (2022-12-15)
+======
+- build: Bump requirements for Xfce 4.18
+- Translation Updates:
+  Hungarian, Turkish
+
+4.17.4 (2022-12-01)
+======
+- Fix blurriness in exo-desktop-item-edit icon when UI scale > 1
+- Fix blurriness in ExoThumbnailPreview when UI scale > 1
+- Fix icon cell renderer blurriness when UI scale > 1
+
+
+4.17.3 (2022-11-01)
+======
+- Deprecate exo-string functions
+- Deprecate exo_noop_*
+- Save clipboard before dialog closes
+- Fix horizontal smooth scrolling in compact view (Issue #86)
+- Do not use exo_noop
+- Translation Updates:
+  Georgian, Portuguese, Turkish, Welsh
+
+4.17.2
+======
+- exo-die: Don't touch exe line in .desktop files
+- exo-open : Only execute local .desktop files
+- Fix $DISPLAY being set to wrong value
+- exo-die, exo-open: Remove dependence on exo_str_is_equal(),
+exo_str_looks_like_an_uri()
+- Bump glib/gio/gthread version to 2.66.0
+- Fix unreliable D-BUS-activated app launch behavior
+- exo-open: Try to open Type=Link .desktop files
+- Use xfce-string functions
+- Dont reduce selection in single click mode (Issue #71)
+- Translation Updates:
+  Azerbaijani, Azerbaijani (Azerbaijan), Greek, Korean, Persian (Iran),
+  Romanian
+
+4.17.1
+======
+- Add typecheck to prevent Gtk-CRITICAL (Issue #63)
+- Initialize `modifier` at the time of declaration
+- Remove redundant code
+- Fix AC_LANG_SOURCE macro
+- Fix `G_UNLIKELY` check
+- Fix memory leak
+- exo_strdup_strftime: Support additional encoding (Issue #66)
+- exo-die: Add trusted flag support
+- Translation Updates:
+  Catalan, Galician, Indonesian, Kazakh, Spanish
+
+4.17.0
+======
+- Keep execute permission bit after launcher modification (Issue #64)
+- Deprecate ExoBinding and ExoMutualBinding In favor of GBinding
+- Free hover_path in tree-view if not NULL
+- Drop preferences-desktop-default-applications icon
+- Properly initialize GdkRectangle to prevent crash (Issue #57)
+- Fix autotools deprecation warnings
+- Revamp the documentation to uniformize accross components
+- Fix compilation warnings
+- exo-icon-chooser-dialog: Throttle search requests
+- exo-icon-chooser-dialog: Focus filter entry by default
+- exo-icon-chooser-dialog: Set default to show to all icons
+- exo-icon-chooser-dialog: Speed up sorting the icon view model
+- Fix keyboard navigation when only one item is present (#53)
+- configure.ac: Allow cross-compiling
+- Translation Updates:
+  Amharic, Arabic, Armenian, Armenian (Armenia), Asturian, Belarusian,
+  Bengali, Bulgarian, Catalan, Chinese (Hong Kong), Croatian, Czech,
+  Danish, Dutch, Eastern Armenian, English (Australia), English (United
+  Kingdom), Estonian, Finnish, Galician, German, Greek, Hebrew,
+  Hungarian, Icelandic, Interlingue, Italian, Kabyle, Kannada, Kazakh,
+  Korean, Latvian, Lithuanian, Malay, Norwegian Bokmål, Norwegian
+  Nynorsk, Occitan (post 1500), Panjabi (Punjabi), Persian (Iran),
+  Polish, Portuguese, Romanian, Russian, Serbian, Slovak, Slovenian,
+  Spanish, Telugu, Thai, Turkish, Ukrainian, Urdu, Urdu (Pakistan),
+  Uyghur
+
 4.16.0
 ======
 - Focus must not be required in single click mode (Issue #190)
